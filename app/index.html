@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>RomM</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="splash">
+  <div class="brand">RomM</div>
+
+  <p id="status" class="status">Connecting…</p>
+
+  <form id="form" class="form" hidden>
+    <label for="url">Server address</label>
+    <input id="url" type="url" inputmode="url" spellcheck="false" autocomplete="off" autocapitalize="off">
+    <button id="go" type="submit">Connect</button>
+  </form>
+
+  <p id="hint" class="hint" hidden>
+    Enter the address of your RomM server, for example
+    <code>http://192.168.1.10</code>.
+  </p>
+
+  <button id="retry" class="retry" hidden>Try again</button>
+  <button id="change" class="link" hidden>Change server</button>
+</main>
+
+<script src="config.js"></script>
+<script src="launch.js"></script>
+</body>
+</html>

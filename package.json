@@ -1,0 +1,23 @@
+{
+  "name": "romm-tizen",
+  "appName": "RomM",
+  "version": "0.1.0",
+  "description": "RomM client for Samsung Tizen TVs: the full RomM web UI, GPU-accelerated browser player, TV remote and gamepad support.",
+  "packageType": "app",
+  "appPath": "app/index.html",
+  "keys": [
+    "ColorF0Red",
+    "ColorF1Green",
+    "ColorF2Yellow",
+    "ColorF3Blue",
+    "MediaPlayPause",
+    "MediaPlay",
+    "MediaPause"
+  ],
+  "author": "dx616b",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dx616b/romm-tizen.git"
+  }
+}

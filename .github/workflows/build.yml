@@ -1,0 +1,70 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Version
+        id: ver
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Lint the launcher
+        run: |
+          node --check app/launch.js
+          node --check app/config.js
+
+      - name: Build .wgt
+        env:
+          TIZEN_AUTHOR_P12: ${{ secrets.TIZEN_AUTHOR_P12 }}
+          TIZEN_AUTHOR_PASSWORD: ${{ secrets.TIZEN_AUTHOR_PASSWORD }}
+        run: |
+          npm install --no-save --prefix /tmp/tizenjs github:reisxd/tizen.js
+          TIZENJS=/tmp/tizenjs/node_modules/tizen/cli.js
+
+          if [ -n "$TIZEN_AUTHOR_P12" ]; then
+            echo "$TIZEN_AUTHOR_P12" | base64 -d > /tmp/author.p12
+            PASS="$TIZEN_AUTHOR_PASSWORD"
+          else
+            echo "::warning::TIZEN_AUTHOR_P12 secret not set, signing with a throwaway certificate"
+            PASS=throwaway
+            node "$TIZENJS" create-tizen-cert --name romm-tizen --password "$PASS" --output /tmp/author.p12
+          fi
+
+          rm -rf wgt
+          mkdir -p wgt
+          cp -r app/. wgt/
+          sed "s/@VERSION@/${{ steps.ver.outputs.version }}/" tizen/config.xml > wgt/config.xml
+
+          cd wgt
+          node "$TIZENJS" build . -t wgt -o ../RomM.wgt --author /tmp/author.p12 --authorPwd "$PASS" -p public
+          cd ..
+          unzip -l RomM.wgt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RomM-wgt
+          path: RomM.wgt
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" RomM.wgt \
+            --title "RomM for Tizen ${GITHUB_REF_NAME}" \
+            --notes "RomM web UI and browser player packaged for Samsung Tizen TVs."
