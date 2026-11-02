@@ -365,3 +365,42 @@ input:focus {
    font-family: ui-monospace, "Roboto Mono", monospace;
    font-size: 22px;
 }
+
+/* Keep the game's own shape on any screen: letterbox instead of stretching. */
+#game canvas {
+   width: 100% !important;
+   height: 100% !important;
+   object-fit: contain;
+}
+
+.menu {
+   position: fixed;
+   top: 0;
+   right: 0;
+   bottom: 0;
+   width: 520px;
+   z-index: 20;
+   padding: 48px 40px;
+   background: rgba(16, 16, 20, 0.94);
+   border-left: 2px solid var(--line);
+   display: flex;
+   flex-direction: column;
+   gap: 18px;
+}
+
+.menu h2 {
+   margin: 0 0 12px;
+   font-size: 34px;
+}
+
+.menu button {
+   width: 100%;
+   align-self: stretch;
+   text-align: left;
+   font-size: 24px;
+}
+
+.speed-gpu {
+   font-size: 16px;
+   color: var(--muted);
+}

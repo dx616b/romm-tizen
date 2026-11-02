@@ -28,6 +28,7 @@
       stack: [],
       pollId: 0,
       playing: false,
+      menuOpen: false,
       current: null
    };
 
@@ -767,8 +768,19 @@
       document.body.appendChild(loader);
    }
 
+   /* What the TV can draw with: WebGL2 for the GPU build of the core, otherwise WebGL1. */
+   function graphicsInfo() {
+      var probe = document.createElement("canvas");
+      var gl = probe.getContext("webgl2");
+      var version = gl ? "WebGL2" : probe.getContext("webgl") ? "WebGL1" : "no WebGL";
+      var ext = gl && gl.getExtension("WEBGL_debug_renderer_info");
+      var gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "";
+      return version + (gpu ? " · " + gpu : "");
+   }
+
    function startSpeedMeter() {
       var box = el("div", { className: "speed", text: "-- fps" });
+      box.appendChild(el("div", { className: "speed-gpu", text: graphicsInfo() }));
       root.appendChild(box);
       var last = null;
       var lastTime = 0;
@@ -777,7 +789,7 @@
             var frames = window.EJS_emulator.gameManager.getFrameNum();
             var now = Date.now();
             if (last !== null && now > lastTime) {
-               box.textContent = Math.round((frames - last) * 1000 / (now - lastTime)) + " fps";
+               box.firstChild.textContent = Math.round((frames - last) * 1000 / (now - lastTime)) + " fps";
             }
             last = frames;
             lastTime = now;
@@ -787,10 +799,54 @@
       }, 1000);
    }
 
+   /* The game menu is ours, not EmulatorJS's: EmulatorJS's menu needs a mouse. Back opens it,
+      and arrows and OK work it. Options apply straight away where the emulator allows. */
+   function openPlayerMenu() {
+      if (state.menuOpen) return;
+      state.menuOpen = true;
+      var settings = loadSettings();
+
+      var vsync = button({ text: "", on: { click: function () {
+         settings.vsync = settings.vsync === "enabled" ? "disabled" : "enabled";
+         saveSettings(settings);
+         try {
+            window.EJS_emulator.gameManager.setVSync(settings.vsync === "enabled");
+         } catch (e) {
+            /* core without VSync control */
+         }
+         vsync.textContent = "VSync: " + (settings.vsync === "enabled" ? "On" : "Off");
+      } } });
+      vsync.textContent = "VSync: " + (settings.vsync === "enabled" ? "On" : "Off");
+
+      var speed = button({ text: "", on: { click: function () {
+         settings.speed = !settings.speed;
+         saveSettings(settings);
+         speed.textContent = "Show speed: " + (settings.speed ? "On" : "Off") + " (next game)";
+      } } });
+      speed.textContent = "Show speed: " + (settings.speed ? "On" : "Off") + " (next game)";
+
+      var panel = el("div", { className: "menu", id: "player-menu" }, [
+         el("h2", { text: "Game menu" }),
+         button({ text: "Resume", on: { click: closePlayerMenu } }),
+         vsync,
+         speed,
+         button({ text: "Back to this game", on: { click: function () { exitPlayer("", false); } } }),
+         button({ text: "Quit to library", on: { click: function () { exitPlayer("", true); } } })
+      ]);
+      root.appendChild(panel);
+      panel.querySelector(".f").focus();
+   }
+
+   function closePlayerMenu() {
+      var panel = document.getElementById("player-menu");
+      if (panel) panel.parentNode.removeChild(panel);
+      state.menuOpen = false;
+   }
+
    /* EmulatorJS keeps global state, so leaving a game reloads the app; the app then
       returns to the game it was playing. */
-   function exitPlayer(notice) {
-      var ret = state.current ? { romId: state.current.romId, platformId: state.current.platformId, notice: notice || "" } : null;
+   function exitPlayer(notice, toLibrary) {
+      var ret = state.current && !toLibrary ? { romId: state.current.romId, platformId: state.current.platformId, notice: notice || "" } : null;
       try {
          sessionStorage.setItem("romm.return", JSON.stringify(ret));
       } catch (e) {
@@ -861,7 +917,13 @@
       if (state.playing) {
          if (k === KEY.BACK || k === KEY.ESC) {
             e.preventDefault();
-            exitPlayer("");
+            if (state.menuOpen) closePlayerMenu();
+            else openPlayerMenu();
+            return;
+         }
+         if (state.menuOpen && DIRECTION[k]) {
+            e.preventDefault();
+            move(DIRECTION[k]);
          }
          return;
       }

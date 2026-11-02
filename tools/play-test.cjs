@@ -163,8 +163,20 @@ function app(port) {
   const fps = ((f1 - f0) / 10).toFixed(1);
   const rewind = await page.evaluate(() => window.EJS_emulator.rewindEnabled);
   console.log(`INFO  emulator speed over 10 s: ${fps} frames/s (rewind ${rewind ? "on" : "off"})`);
+  await page.keyboard.press("Escape");
+  const menuOpen = (await page.locator("#player-menu").count()) === 1;
+  await page.keyboard.press("Escape");
+  const menuClosed = (await page.locator("#player-menu").count()) === 0;
+  const picture = await page.evaluate(() => {
+    const c = document.querySelector("#game canvas");
+    if (!c) return "none";
+    const box = c.getBoundingClientRect();
+    return `${Math.round(box.width)}x${Math.round(box.height)}`;
+  });
+  console.log(`INFO  game picture box: ${picture}`);
   const meter = await page.textContent(".speed").catch(() => "");
   console.log(`INFO  on-screen speed meter: ${meter}`);
+  console.log(`INFO  graphics: ${await page.textContent(".speed-gpu").catch(() => "none")}`);
   await page.screenshot({ path: "/tmp/play-shot.png" });
 
   const vsync = await page.evaluate(() => {
@@ -194,6 +206,7 @@ function app(port) {
     ["EmulatorJS loaded from RomM, not the internet", hits.loader > 0 && outside.length === 0, `files=${hits.loader} outside=${outside.length}`],
     ["game runs with the internet blocked", blockedCdn >= 0 && canvasInfo.found, `blocked CDN requests=${blockedCdn}`],
     ["Neo Geo core downloaded from RomM", hits.core > 0, `cores=${hits.core}`],
+    ["Back opens the game menu, Back again closes it", menuOpen && menuClosed, `open=${menuOpen} closed=${menuClosed}`],
     ["no page errors", errors.length === 0, errors.slice(0, 3).join(" | ")],
   ];
   let failed = 0;
