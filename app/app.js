@@ -134,10 +134,10 @@
    function screen(title, nodes, sub) {
       state.pollId++;
       root.innerHTML = "";
-      var header = el("header", { className: "top" }, [
+      var header = title ? el("header", { className: "top" }, [
          el("h1", { text: title }),
          sub ? el("p", { className: "sub", text: sub }) : null
-      ]);
+      ]) : null;
       var body = el("main", { className: "screen" }, [header].concat(nodes));
       root.appendChild(body);
       var first = body.querySelector(".f");
@@ -176,17 +176,33 @@
       }
    }
 
+   function recentServers() {
+      try {
+         return JSON.parse(load("romm.recent") || "[]");
+      } catch (e) {
+         return [];
+      }
+   }
+
+   function rememberServer(url) {
+      var list = recentServers().filter(function (u) { return u !== url; });
+      list.unshift(url);
+      save("romm.recent", JSON.stringify(list.slice(0, 5)));
+   }
+
    function viewServer(message) {
       var input = el("input", {
          className: "f",
          type: "url",
          id: "url",
          value: state.server,
-         placeholder: "http://192.168.1.10",
+         placeholder: "192.168.1.10",
          autocapitalize: "off",
-         spellcheck: "false"
+         spellcheck: "false",
+         autocomplete: "off"
       });
       var status = el("p", { className: "status", text: message || "" });
+      var found = el("div", { className: "chips" });
       var connect = function () {
          connectTo(input.value, status);
       };
@@ -196,12 +212,140 @@
             connect();
          }
       });
-      screen("RomM", [
-         el("p", { className: "hint", text: "Enter the address of your RomM server, for example http://192.168.1.10" }),
-         input,
-         button({ text: "Connect", on: { click: connect } }),
-         status
+
+      var scanButton = button({ text: "Find on network" });
+      scanButton.addEventListener("click", function () {
+         scanButton.disabled = true;
+         scanNetwork(found, status, function () { scanButton.disabled = false; });
+      });
+
+      var recents = recentServers();
+      screen(null, [
+         el("div", { className: "login" }, [
+            el("div", { className: "brand" }, [
+               el("div", { className: "logo", text: "R" }),
+               el("h1", { text: "RomM" }),
+               el("p", { className: "tagline", text: "Your game library, on the big screen." })
+            ]),
+            el("div", { className: "card" }, [
+               el("label", { className: "label", text: "Server address", "for": "url" }),
+               el("p", { className: "hint", text: "Type it with the remote, pick a recent one, or search your network." }),
+               input,
+               el("div", { className: "row" }, [
+                  button({ text: "Connect", on: { click: connect } }),
+                  scanButton
+               ]),
+               status,
+               recents.length ? el("p", { className: "label", text: "Recent" }) : null,
+               recents.length ? el("div", { className: "chips" }, recents.map(function (url) {
+                  return button({ className: "chip", text: url.replace(/^https?:\/\//, ""), on: {
+                     click: function () { connectTo(url, status); }
+                  } });
+               })) : null,
+               found
+            ])
+         ])
       ]);
+   }
+
+   function isPrivateIp(ip) {
+      return /^192\.168\./.test(ip) || /^10\./.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+   }
+
+   /* Browsers hide the local address, but the WebRTC candidates still reveal the
+      subnet the TV is on; that is enough to know where to look for RomM. */
+   function localNetworks() {
+      return new Promise(function (resolve) {
+         var prefixes = [];
+         var pc;
+         try {
+            pc = new RTCPeerConnection({ iceServers: [] });
+         } catch (e) {
+            resolve(prefixes);
+            return;
+         }
+         pc.createDataChannel("scan");
+         pc.onicecandidate = function (ev) {
+            if (!ev.candidate) return;
+            var m = /(\d{1,3}(?:\.\d{1,3}){3})/.exec(ev.candidate.candidate);
+            if (!m || !isPrivateIp(m[1])) return;
+            var prefix = m[1].split(".").slice(0, 3).join(".");
+            if (prefixes.indexOf(prefix) < 0) prefixes.push(prefix);
+         };
+         pc.createOffer().then(function (offer) {
+            return pc.setLocalDescription(offer);
+         }).catch(function () {});
+         setTimeout(function () {
+            try {
+               pc.close();
+            } catch (e) {
+               /* already closed */
+            }
+            resolve(prefixes);
+         }, 1500);
+      });
+   }
+
+   /* A RomM server answers /api/heartbeat with its version. Requires the server to
+      allow this origin (ROMM_CORS_ALLOWED_ORIGINS), which the app needs anyway. */
+   function probeHost(url) {
+      return new Promise(function (resolve) {
+         var timer = setTimeout(function () { resolve(null); }, 1200);
+         fetch(url + "/api/heartbeat", { mode: "cors", cache: "no-store" })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (body) {
+               clearTimeout(timer);
+               resolve(body && body.SYSTEM && body.SYSTEM.VERSION ? url : null);
+            })
+            .catch(function () {
+               clearTimeout(timer);
+               resolve(null);
+            });
+      });
+   }
+
+   function scanNetwork(found, status, done) {
+      found.innerHTML = "";
+      status.textContent = "Looking for your network…";
+      localNetworks().then(function (prefixes) {
+         if (!prefixes.length) prefixes = ["192.168.1", "192.168.0", "10.0.0"];
+         var hosts = [];
+         prefixes.forEach(function (prefix) {
+            for (var i = 1; i < 255; i++) hosts.push("http://" + prefix + "." + i);
+         });
+         var index = 0;
+         var checked = 0;
+         var hits = [];
+         status.textContent = "Scanning " + prefixes.join(", ") + ".x";
+
+         function next() {
+            if (index >= hosts.length) return Promise.resolve();
+            var url = hosts[index++];
+            return probeHost(url).then(function (hit) {
+               checked++;
+               if (hit) {
+                  hits.push(hit);
+                  found.appendChild(button({
+                     className: "chip",
+                     text: hit.replace(/^https?:\/\//, ""),
+                     on: { click: function () { connectTo(hit, status); } }
+                  }));
+               }
+               status.textContent = "Scanning… " + checked + " of " + hosts.length +
+                  (hits.length ? " · " + hits.length + " found" : "");
+               return next();
+            });
+         }
+
+         var workers = [];
+         for (var w = 0; w < 40; w++) workers.push(next());
+         return Promise.all(workers).then(function () {
+            status.textContent = hits.length
+               ? "Choose your RomM server."
+               : "No RomM server found. Type the address instead.";
+            done();
+         });
+      });
    }
 
    function probe(url) {
@@ -229,6 +373,7 @@
          }
          state.server = url;
          save("romm.server", url);
+         rememberServer(url);
          state.token = load("romm.token");
          if (state.token) show([viewServer, viewLibrary]);
          else show([viewServer, viewPair]);
@@ -255,11 +400,22 @@
          if (mine !== state.pollId) return;
          var link = state.server + init.verification_path + "?user_code=" + encodeURIComponent(init.user_code);
          var status = el("p", { className: "status", text: "Waiting for approval…" });
+         var qr = qrcode(0, "M");
+         qr.addData(link);
+         qr.make();
+         var qrBox = el("div", { className: "qr" });
+         qrBox.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2 });
          screen("Connect this TV", [
-            el("p", { className: "hint", text: "In RomM on a phone or computer, open this page and approve the code:" }),
-            el("p", { className: "link", text: link }),
-            el("p", { className: "code", text: init.user_code }),
-            status,
+            el("div", { className: "pair" }, [
+               qrBox,
+               el("div", { className: "pair-text" }, [
+                  el("p", { className: "hint", text: "Scan the code with your phone, or open this link on a computer:" }),
+                  el("p", { className: "link", text: link }),
+                  el("p", { className: "hint", text: "Then approve the code shown below:" }),
+                  el("p", { className: "code", text: init.user_code }),
+                  status
+               ])
+            ]),
             button({ text: "Change server", on: { click: function () { show([viewServer]); } } })
          ], notice);
          poll(init, state.pollId, status);
@@ -312,11 +468,16 @@
             .sort(function (a, b) { return (a.custom_name || a.name).localeCompare(b.custom_name || b.name); });
 
          var tiles = withGames.map(function (p) {
+            var name = p.custom_name || p.name;
+            var logo = assetUrl(p.url_logo)
+               ? el("img", { className: "plogo", alt: "", src: assetUrl(p.url_logo) })
+               : el("div", { className: "plogo fallback", text: name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() });
             return button({
-               className: "tile",
+               className: "tile platform",
                on: { click: function () { push(function () { viewRoms(p, 0, []); }); } }
             }, [
-               el("span", { className: "tname", text: p.custom_name || p.name }),
+               logo,
+               el("span", { className: "tname", text: name }),
                el("span", { className: "tcount", text: p.rom_count + " games" })
             ]);
          });
@@ -339,8 +500,13 @@
       show([viewServer, viewPair]);
    }
 
+   function assetUrl(path) {
+      if (!path) return null;
+      return /^https?:\/\//.test(path) ? path : state.server + path;
+   }
+
    function coverUrl(path) {
-      return path ? state.server + path : null;
+      return assetUrl(path);
    }
 
    function romTile(rom, onClick) {
@@ -391,7 +557,10 @@
          var poster = coverUrl(rom.path_cover_large || rom.path_cover_small);
          var status = el("p", { className: "status" });
          var summary = rom.summary ? rom.summary.slice(0, 500) : "No description.";
+         var backdrop = poster ? el("div", { className: "backdrop", id: "backdrop" }) : null;
+         if (backdrop) backdrop.style.backgroundImage = "url(\"" + poster + "\")";
          screen(rom.name || rom.fs_name, [
+            backdrop,
             el("div", { className: "detail" }, [
                poster ? el("img", { className: "poster", alt: "", src: poster }) : null,
                el("div", { className: "info" }, [

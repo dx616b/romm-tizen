@@ -6,9 +6,10 @@ browse your library with the TV remote.
 
 What it does today:
 
-- **Pairing with a code.** The TV shows a short code. You approve it in RomM on a
-  phone or computer. No typing passwords with the remote.
-- **Platforms and games.** Browse platforms and their games, with cover art,
+- **Pairing with a code.** The TV shows a short code and a QR code. Scan it with a
+  phone and approve the code in RomM. No typing passwords with the remote.
+- **Finding the server.** Recent servers, or a network scan for RomM.
+- **Platforms and games.** Browse platforms (with RomM's logos) and their games, with cover art,
   using D-pad and OK. Back goes up a level.
 - **Game details.** Cover, description, file name and size.
 
@@ -19,6 +20,7 @@ app/index.html   the page
 app/app.js       server, pairing, library and remote navigation
 app/style.css    TV layout
 app/config.js    optional default server address (empty by default)
+app/qrcode.js    QR encoder (qrcode-generator, MIT)
 tizen/           widget manifest
 tools/app-test.cjs   end-to-end test against a fake RomM server
 ```
@@ -44,9 +46,10 @@ The package id is `RommTV0001` (exactly 10 characters, as Tizen requires).
 ## Use
 
 1. Open **RomM** on the TV.
-2. Enter your server address, for example `http://192.168.1.10`, and press OK.
-3. Note the code shown on the TV. In RomM on a phone or computer, open the link
-   on the screen and approve the code.
+2. Enter your server address, for example `192.168.1.10`, or pick a recent one, or
+   choose **Find on network** to search your subnet for RomM.
+3. Scan the QR code on the TV with your phone, or open the link shown, then approve
+   the code in RomM.
 4. Browse platforms and games.
 
 To unpair the TV, choose **Forget this TV** on the platforms screen.

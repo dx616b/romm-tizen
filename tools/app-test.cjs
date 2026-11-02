@@ -28,7 +28,7 @@ function check(name, ok, extra) {
 function fakeRomm(port) {
   const state = { approved: false, pendingPolls: 0, polls: 0 };
   const platforms = [
-    { id: 1, name: "Neo Geo", slug: "neogeo", fs_slug: "neogeo", rom_count: 2, custom_name: null },
+    { id: 1, name: "Neo Geo", slug: "neogeo", fs_slug: "neogeo", rom_count: 2, custom_name: null, url_logo: "/assets/romm/resources/logo.png" },
     { id: 2, name: "Empty", slug: "empty", fs_slug: "empty", rom_count: 0, custom_name: null },
   ];
   const roms = [
@@ -66,7 +66,7 @@ function fakeRomm(port) {
         state.approved = true;
         return send(200, { ok: true });
       }
-      if (url.pathname === "/api/heartbeat") return send(200, { status: "ok" });
+      if (url.pathname === "/api/heartbeat") return send(200, { SYSTEM: { VERSION: "4.8.0-test" } });
       if (url.pathname === "/api/auth/device/init" && req.method === "POST") {
         state.approved = false;
         state.polls = 0;
@@ -139,6 +139,8 @@ async function focusedText(page) {
 
     await page.waitForSelector("text=ABCD-EFGH", { timeout: 8000 }).catch(() => {});
     check("pairing code is shown", (await page.textContent("body")).includes("ABCD-EFGH"));
+    check("pairing shows a QR code", (await page.locator(".qr svg").count()) === 1);
+    check("QR code is a valid size", (await page.locator(".qr svg").boundingBox()).width > 200);
 
     await fetch("http://127.0.0.1:8001/__approve");
     await page.waitForSelector("text=Neo Geo", { timeout: 10000 }).catch(() => {});
@@ -146,6 +148,7 @@ async function focusedText(page) {
     check("platforms without games are hidden", !(await page.textContent("body")).includes("Empty"));
     check("token is stored after approval", (await page.evaluate(() => localStorage.getItem("romm.token"))) === "rmm_testtoken");
 
+    check("platform logo loads from RomM", (await page.locator("img.plogo").count()) === 1);
     await page.click("text=Neo Geo");
     await page.waitForSelector("text=Metal Slug", { timeout: 8000 }).catch(() => {});
     check("games load for the platform", (await page.textContent("body")).includes("Metal Slug"));
@@ -196,6 +199,13 @@ async function focusedText(page) {
     const page = await context.newPage();
     await page.goto("http://localhost:8000/");
     check("no server is built in", (await page.inputValue("#url")) === "");
+    check("login has a Find on network action", (await page.locator("text=Find on network").count()) === 1);
+    await page.fill("#url", "http://127.0.0.1:8001");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("text=ABCD-EFGH", { timeout: 8000 }).catch(() => {});
+    await page.reload();
+    await page.waitForSelector("text=Recent", { timeout: 5000 }).catch(() => {});
+    check("recent servers are offered after connecting", (await page.locator(".chip", { hasText: "127.0.0.1:8001" }).count()) >= 1);
     await context.close();
   }
 
