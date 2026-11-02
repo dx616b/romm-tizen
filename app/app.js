@@ -16,7 +16,8 @@
    var PAGE = 60;
    var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, ESC: 27, BACK: 10009 };
    var DIRECTION = { 37: "L", 38: "U", 39: "R", 40: "D" };
-   var EJS_CDN = "https://cdn.emulatorjs.org/4.2.3/data";
+   /* EmulatorJS files served by RomM itself, so the TV needs no internet access. */
+   var EMULATORJS_PATH = "/assets/emulatorjs/data";
    /* Cores that need cross-origin isolation (SharedArrayBuffer) cannot run in the TV's app page. */
    var THREADED_CORES = ["dosbox_pure", "ppsspp", "azahar"];
 
@@ -652,6 +653,8 @@
       }
       var bios = pickBios(platform);
       var needsBios = /^neogeo(mvs|aes)$/i.test(platform.slug || "");
+      /* Arcade cores also read a Neo Geo style archive whole (RomM's keepArcadeBiosWhole). */
+      var wholeBios = /^(arcade|mame|neogeomvs|neogeoaes)$/i.test(platform.slug || "");
       if (needsBios && !bios) {
          screen(rom.name || rom.fs_name, [el("p", { className: "status", text: "The BIOS for this system is missing in RomM." }),
             button({ text: "Back", on: { click: back } })]);
@@ -665,11 +668,15 @@
          apiBlob("/api/roms/" + rom.id + "/content/" + encodeURIComponent(rom.fs_name)),
          bios ? apiBlob("/api/firmware/" + bios.id + "/content/" + encodeURIComponent(bios.file_name)) : null
       ]).then(function (parts) {
+         /* Neo Geo reads neogeo.zip whole, so it goes in as an external file under its own
+            name, as RomM does (keepArcadeBiosWhole). Other systems get a plain BIOS URL. */
+         var biosBlob = parts[1] ? URL.createObjectURL(parts[1]) : "";
          startEmulator({
             core: core,
             gameUrl: URL.createObjectURL(parts[0]),
             gameName: rom.fs_name,
-            biosUrl: parts[1] ? URL.createObjectURL(parts[1]) : ""
+            biosUrl: wholeBios ? "" : biosBlob,
+            externalFiles: wholeBios && bios ? { ["/" + bios.file_name]: biosBlob } : {}
          });
       }).catch(function (err) {
          if (err.unauthorized) return;
@@ -688,16 +695,30 @@
       window.EJS_gameUrl = game.gameUrl;
       window.EJS_gameName = game.gameName;
       window.EJS_biosUrl = game.biosUrl;
-      window.EJS_pathtodata = EJS_CDN;
+      window.EJS_externalFiles = game.externalFiles || {};
+      /* VSync off by default. Saved settings would override this default once a user
+         changes anything, so they are turned off; the TV has no settings to keep. */
+      window.EJS_defaultOptions = { vsync: "disabled" };
+      window.EJS_disableLocalStorage = true;
+      /* The defaults above are not always applied to the running core, so VSync is also
+         switched off once the game starts. */
+      window.EJS_onGameStart = function () {
+         try {
+            window.EJS_emulator.gameManager.setVSync(false);
+         } catch (e) {
+            /* the core has no VSync control */
+         }
+      };
+      window.EJS_pathtodata = state.server + EMULATORJS_PATH;
       window.EJS_threads = false;
       window.EJS_startOnLoaded = true;
       window.EJS_color = "#4f8cff";
       window.EJS_backgroundColor = "#000000";
 
       var loader = document.createElement("script");
-      loader.src = EJS_CDN + "/loader.js";
+      loader.src = state.server + EMULATORJS_PATH + "/loader.js";
       loader.onerror = function () {
-         exitPlayer("The emulator could not be loaded. The TV needs internet access for it.");
+         exitPlayer("The emulator could not be loaded. Check that RomM serves /assets/emulatorjs.");
       };
       document.body.appendChild(loader);
    }

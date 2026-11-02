@@ -88,7 +88,11 @@ function fakeRomm(port) {
       if (!authed && url.pathname.startsWith("/api/")) {
         return send(401, { detail: "Not authenticated" });
       }
-      if (url.pathname === "/api/platforms") return send(200, platforms);
+      if (url.pathname === "/assets/emulatorjs/data/loader.js") {
+      res.writeHead(200, { "Content-Type": "application/javascript", "Access-Control-Allow-Origin": "*" });
+      return res.end("window.__emulatorLoaderRan = true;");
+    }
+    if (url.pathname === "/api/platforms") return send(200, platforms);
       if (url.pathname === "/api/roms") {
         const pid = Number(url.searchParams.get("platform_ids"));
         const items = roms.filter(() => pid === 1);
@@ -207,10 +211,11 @@ async function focusedText(page) {
     check("play opens the emulator screen", (await page.locator("#game").count()) === 1);
     check("the Neo Geo core is chosen", (await page.evaluate(() => window.EJS_core)) === "fbneo");
     check("the game is a local blob, not a RomM URL", String(await page.evaluate(() => window.EJS_gameUrl)).startsWith("blob:"));
-    check("the BIOS is a local blob", String(await page.evaluate(() => window.EJS_biosUrl)).startsWith("blob:"));
+    check("the BIOS goes in whole as neogeo.zip", String(await page.evaluate(() => (window.EJS_externalFiles || {})["/neogeo.zip"])).startsWith("blob:"));
+    check("VSync default is set", (await page.evaluate(() => JSON.stringify(window.EJS_defaultOptions))) === '{"vsync":"disabled"}');
     check("the ROM and BIOS were fetched with the device token", state.contentHits.includes("rom") && state.contentHits.includes("bios"), state.contentHits.join(","));
     await page.waitForTimeout(800);
-    check("the EmulatorJS loader is requested from its CDN", loaderRequests.some((u) => u.startsWith("https://cdn.emulatorjs.org/")), loaderRequests[0] || "");
+    check("the EmulatorJS loader comes from RomM", loaderRequests.some((u) => u.startsWith("http://127.0.0.1:8001/assets/emulatorjs/data/")), loaderRequests[0] || "");
 
     await page.keyboard.press("Escape");
     await page.waitForSelector("text=Metal Slug", { timeout: 10000 }).catch(() => {});
