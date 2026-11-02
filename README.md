@@ -16,13 +16,64 @@ tizen/           widget manifest
 
 ## Install
 
-Grab `RomM.wgt` from the latest build artifact or release, then either
+A `.wgt` signed with a self-signed certificate is rejected by the TV with
+**"Operation not allowed"**. Samsung TVs only install packages signed with a
+distributor certificate that Samsung issues for that specific TV (identified by
+its DUID), so signing needs one round trip through a Samsung account.
 
-* copy it to a USB stick and use the TV's app-install dialog, or
-* push it with `sdb connect <tv-ip>` and `sdb install RomM.wgt`.
+### One command
 
-The widget is signed with a throwaway certificate unless `TIZEN_AUTHOR_P12` and
-`TIZEN_AUTHOR_PASSWORD` secrets are set, so a TV in developer mode is required.
+Prerequisites: `sdb` (from Tizen Studio or the Samsung TV SDK), Node.js and git.
+Turn on developer mode on the TV first: **Apps → press `12345` → Host PC IP** =
+the address of the computer running the command, then restart the TV.
+
+```sh
+./tools/tv-setup.sh 192.168.1.50
+```
+
+It reads the TV's DUID, opens Samsung's sign-in page, creates the author and
+distributor certificates, builds `RomM.wgt`, registers the TV and installs the
+app. Certificates are cached in `~/.config/romm-tizen/samsung-cert`, so later
+runs only rebuild and reinstall.
+
+### Manually
+
+```sh
+# 1. DUID
+sdb connect 192.168.1.50:26101
+sdb -s 192.168.1.50:26101 shell 0 getduid
+
+# 2. certificates (paste the JSON from the sign-in page when asked)
+node cli.js create-samsung-cert --name "RomM TV" --email you@example.com \
+  --password <pass> --duidList <duid> --privilege Public --output cert/
+
+# 3. build
+cd wgt && node cli.js build . -t wgt -o ../RomM.wgt \
+  --author ../cert/author.p12 --authorPwd <pass> \
+  --distributor ../cert/distributor.p12 --distributorPwd <pass>
+
+# 4. install
+sdb -s 192.168.1.50:26101 push cert/device-profile.xml /home/owner/share/tmp/sdk_tools/device-profile.xml
+sdb -s 192.168.1.50:26101 install RomM.wgt
+```
+
+CI builds `RomM.wgt` on every push. To make those artifacts installable, add the
+certificates from step 2 as repository secrets, base64-encoded:
+
+```sh
+base64 -w0 cert/author.p12      > author.b64        # -> TIZEN_AUTHOR_P12
+base64 -w0 cert/distributor.p12 > distributor.b64   # -> TIZEN_DISTRIBUTOR_P12
+```
+
+plus `TIZEN_AUTHOR_PASSWORD` and `TIZEN_DISTRIBUTOR_PASSWORD`. Without them the
+workflow still builds, but signs with a throwaway certificate the TV refuses.
+
+### Tizen no cert route
+
+If TizenBrew is already installed on the TV, a module can be added from a GitHub
+repository without touching certificates. This client is a plain web app, so it
+can be registered as a module pointing at `app/`, though navigating to RomM takes
+over the TizenBrew window.
 
 ## Configure
 
