@@ -346,3 +346,9 @@ input:focus {
 [hidden] {
    display: none !important;
 }
+
+.game {
+   position: fixed;
+   inset: 0;
+   background: #000;
+}

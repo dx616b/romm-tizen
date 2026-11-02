@@ -26,9 +26,10 @@ function check(name, ok, extra) {
 }
 
 function fakeRomm(port) {
-  const state = { approved: false, pendingPolls: 0, polls: 0 };
+  const state = { approved: false, pendingPolls: 0, polls: 0, contentHits: [] };
   const platforms = [
-    { id: 1, name: "Neo Geo", slug: "neogeo", fs_slug: "neogeo", rom_count: 2, custom_name: null, url_logo: "/assets/romm/resources/logo.png" },
+    { id: 1, name: "Neo Geo MVS", slug: "neogeomvs", fs_slug: "neogeomvs", rom_count: 2, custom_name: null, url_logo: "/assets/romm/resources/logo.png",
+      firmware: [{ id: 5, file_name: "neogeo.zip", missing_from_fs: false }] },
     { id: 2, name: "Empty", slug: "empty", fs_slug: "empty", rom_count: 0, custom_name: null },
   ];
   const roms = [
@@ -92,6 +93,16 @@ function fakeRomm(port) {
         const pid = Number(url.searchParams.get("platform_ids"));
         const items = roms.filter(() => pid === 1);
         return send(200, { items, total: items.length, limit: 60, offset: 0 });
+      }
+      if (url.pathname === "/api/roms/10/content/metalslug.zip") {
+        if (!authed) return send(401, { detail: "Not authenticated" });
+        state.contentHits.push("rom");
+        return send(200, Buffer.from("PK\u0003\u0004fake-rom"), "application/zip");
+      }
+      if (url.pathname === "/api/firmware/5/content/neogeo.zip") {
+        if (!authed) return send(401, { detail: "Not authenticated" });
+        state.contentHits.push("bios");
+        return send(200, Buffer.from("PK\u0003\u0004fake-bios"), "application/zip");
       }
       if (url.pathname.startsWith("/api/roms/")) {
         const rom = roms.find((r) => String(r.id) === url.pathname.split("/")[3]);
@@ -171,6 +182,42 @@ async function focusedText(page) {
     await context.close();
   }
 
+  // Play: the ROM and BIOS are fetched with the device token, the Neo Geo core is
+  // selected, and Back leaves the game and returns to the same title.
+  {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const loaderRequests = [];
+    page.on("request", (r) => {
+      if (r.url().includes("loader.js")) loaderRequests.push(r.url());
+    });
+    await page.goto("http://localhost:8000/");
+    await page.fill("#url", "http://127.0.0.1:8001");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("text=ABCD-EFGH", { timeout: 8000 }).catch(() => {});
+    await fetch("http://127.0.0.1:8001/__approve");
+    await page.waitForSelector("text=Neo Geo", { timeout: 10000 }).catch(() => {});
+    await page.click("text=Neo Geo");
+    await page.waitForSelector("text=Metal Slug", { timeout: 8000 }).catch(() => {});
+    await page.click("text=Metal Slug");
+    await page.waitForSelector("text=Play", { timeout: 8000 }).catch(() => {});
+    state.contentHits.length = 0;
+    await page.click("button:has-text('Play')");
+    await page.waitForSelector("#game", { timeout: 8000 }).catch(() => {});
+    check("play opens the emulator screen", (await page.locator("#game").count()) === 1);
+    check("the Neo Geo core is chosen", (await page.evaluate(() => window.EJS_core)) === "fbneo");
+    check("the game is a local blob, not a RomM URL", String(await page.evaluate(() => window.EJS_gameUrl)).startsWith("blob:"));
+    check("the BIOS is a local blob", String(await page.evaluate(() => window.EJS_biosUrl)).startsWith("blob:"));
+    check("the ROM and BIOS were fetched with the device token", state.contentHits.includes("rom") && state.contentHits.includes("bios"), state.contentHits.join(","));
+    await page.waitForTimeout(800);
+    check("the EmulatorJS loader is requested from its CDN", loaderRequests.some((u) => u.startsWith("https://cdn.emulatorjs.org/")), loaderRequests[0] || "");
+
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("text=Metal Slug", { timeout: 10000 }).catch(() => {});
+    check("leaving the game returns to that title", (await page.textContent("body")).includes("Metal Slug") && (await page.locator("#game").count()) === 0);
+    await context.close();
+  }
+
   // An expired token sends the TV back to pairing with a message, not a dead screen.
   {
     const context = await browser.newContext();
@@ -184,7 +231,6 @@ async function focusedText(page) {
     });
     const page = await context.newPage();
     await page.goto("http://localhost:8000/");
-    await page.keyboard.press("Enter");
     await page.waitForSelector("text=ABCD-EFGH", { timeout: 8000 }).catch(() => {});
     const body = await page.textContent("body");
     check("expired token returns to pairing", body.includes("ABCD-EFGH"));

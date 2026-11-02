@@ -12,8 +12,19 @@ What it does today:
 - **Platforms and games.** Browse platforms (with RomM's logos) and their games, with cover art,
   using D-pad and OK. Back goes up a level.
 - **Game details.** Cover, description, file name and size.
+- **Playing.** The ROM and BIOS are downloaded from RomM with the TV's token and run
+  in EmulatorJS, the same engine as RomM's browser player. Press Back on the TV to
+  leave a game.
 
-Not yet: playing games on the TV. The Play button is in place and says so.
+Limits in this version:
+
+- The emulator is loaded from `cdn.emulatorjs.org` (4.2.3), so the TV needs internet
+  access while playing.
+- Only cores that run without cross-origin isolation are offered (threaded cores such
+  as PPSSPP and DOSBox Pure are not).
+- BIOS handling covers Neo Geo MVS (`neogeo.zip`) and systems with a single firmware
+  file. Other BIOS setups are not handled yet.
+- Performance on the TV is not measured yet.
 
 ```
 app/index.html   the page
@@ -21,6 +32,7 @@ app/app.js       server, pairing, library and remote navigation
 app/style.css    TV layout
 app/config.js    optional default server address (empty by default)
 app/qrcode.js    QR encoder (qrcode-generator, MIT)
+app/ejs-cores.js platform → EmulatorJS core map, copied from RomM
 tizen/           widget manifest
 tools/app-test.cjs   end-to-end test against a fake RomM server
 ```

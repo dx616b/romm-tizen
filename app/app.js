@@ -16,13 +16,18 @@
    var PAGE = 60;
    var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, ESC: 27, BACK: 10009 };
    var DIRECTION = { 37: "L", 38: "U", 39: "R", 40: "D" };
+   var EJS_CDN = "https://cdn.emulatorjs.org/4.2.3/data";
+   /* Cores that need cross-origin isolation (SharedArrayBuffer) cannot run in the TV's app page. */
+   var THREADED_CORES = ["dosbox_pure", "ppsspp", "azahar"];
 
    var root = document.getElementById("app");
    var state = {
       server: "",
       token: "",
       stack: [],
-      pollId: 0
+      pollId: 0,
+      playing: false,
+      current: null
    };
 
    function load(key) {
@@ -126,6 +131,28 @@
             }
             return data;
          });
+      });
+   }
+
+   function apiBlob(path) {
+      return fetch(state.server + path, {
+         headers: { Authorization: "Bearer " + state.token },
+         cache: "no-store"
+      }).then(function (r) {
+         if (r.status === 401) {
+            state.token = "";
+            save("romm.token", "");
+            show([viewServer, viewPair], "Pair this TV again: RomM no longer approves it.");
+            var expired = new Error("unauthorized");
+            expired.unauthorized = true;
+            throw expired;
+         }
+         if (!r.ok) {
+            var err = new Error("HTTP " + r.status);
+            err.status = r.status;
+            throw err;
+         }
+         return r.blob();
       });
    }
 
@@ -551,7 +578,17 @@
       });
    }
 
-   function viewRom(id) {
+   function openRom(id, platformId) {
+      api("/api/platforms").then(function (list) {
+         var platform = list.filter(function (p) { return p.id === platformId; })[0];
+         viewRom(id, platform);
+      }).catch(function (err) {
+         if (err.unauthorized) return;
+         screen("Game", errorNodes(err, function () { openRom(id, platformId); }));
+      });
+   }
+
+   function viewRom(id, platform) {
       screen("Game", [el("p", { className: "hint", text: "Loading…" })]);
       api("/api/roms/" + id).then(function (rom) {
          var poster = coverUrl(rom.path_cover_large || rom.path_cover_small);
@@ -572,7 +609,11 @@
                text: "Play",
                on: {
                   click: function () {
-                     status.textContent = "Playing on the TV is the next step. This version only browses the library.";
+                     if (!platform) {
+                        status.textContent = "This game's platform could not be found. Go back and open it again.";
+                        return;
+                     }
+                     playRom(rom, platform);
                   }
                }
             }),
@@ -580,8 +621,97 @@
          ]);
       }).catch(function (err) {
          if (err.unauthorized) return;
-         screen("Game", errorNodes(err, function () { viewRom(id); }));
+         screen("Game", errorNodes(err, function () { viewRom(id, platform); }));
       });
+   }
+
+   /* ----------------------------------------------------------- player -- */
+
+   function pickCore(slug) {
+      var cores = EJS_CORES[String(slug || "").toLowerCase()] || [];
+      for (var i = 0; i < cores.length; i++) {
+         if (THREADED_CORES.indexOf(cores[i]) < 0) return cores[i];
+      }
+      return null;
+   }
+
+   /* Neo Geo keeps its BIOS as neogeo.zip; other systems use the platform's only firmware. */
+   function pickBios(platform) {
+      var list = (platform.firmware || []).filter(function (f) { return !f.missing_from_fs; });
+      var named = list.filter(function (f) { return /neogeo/i.test(f.file_name); })[0];
+      if (named) return named;
+      return list.length === 1 ? list[0] : null;
+   }
+
+   function playRom(rom, platform) {
+      var core = pickCore(platform.slug);
+      if (!core) {
+         screen(rom.name || rom.fs_name, [el("p", { className: "status", text: "This system can't run on the TV yet." }),
+            button({ text: "Back", on: { click: back } })]);
+         return;
+      }
+      var bios = pickBios(platform);
+      var needsBios = /^neogeo(mvs|aes)$/i.test(platform.slug || "");
+      if (needsBios && !bios) {
+         screen(rom.name || rom.fs_name, [el("p", { className: "status", text: "The BIOS for this system is missing in RomM." }),
+            button({ text: "Back", on: { click: back } })]);
+         return;
+      }
+
+      state.current = { romId: rom.id, platformId: platform.id };
+      screen("Loading", [el("p", { className: "hint", text: "Downloading " + rom.fs_name + "…" })]);
+
+      Promise.all([
+         apiBlob("/api/roms/" + rom.id + "/content/" + encodeURIComponent(rom.fs_name)),
+         bios ? apiBlob("/api/firmware/" + bios.id + "/content/" + encodeURIComponent(bios.file_name)) : null
+      ]).then(function (parts) {
+         startEmulator({
+            core: core,
+            gameUrl: URL.createObjectURL(parts[0]),
+            gameName: rom.fs_name,
+            biosUrl: parts[1] ? URL.createObjectURL(parts[1]) : ""
+         });
+      }).catch(function (err) {
+         if (err.unauthorized) return;
+         screen(rom.name || rom.fs_name, errorNodes(err, function () { playRom(rom, platform); }));
+      });
+   }
+
+   function startEmulator(game) {
+      state.playing = true;
+      root.innerHTML = "";
+      root.appendChild(el("div", { id: "game", className: "game" }));
+
+      /* EmulatorJS reads its settings from these globals when its loader runs. */
+      window.EJS_player = "#game";
+      window.EJS_core = game.core;
+      window.EJS_gameUrl = game.gameUrl;
+      window.EJS_gameName = game.gameName;
+      window.EJS_biosUrl = game.biosUrl;
+      window.EJS_pathtodata = EJS_CDN;
+      window.EJS_threads = false;
+      window.EJS_startOnLoaded = true;
+      window.EJS_color = "#4f8cff";
+      window.EJS_backgroundColor = "#000000";
+
+      var loader = document.createElement("script");
+      loader.src = EJS_CDN + "/loader.js";
+      loader.onerror = function () {
+         exitPlayer("The emulator could not be loaded. The TV needs internet access for it.");
+      };
+      document.body.appendChild(loader);
+   }
+
+   /* EmulatorJS keeps global state, so leaving a game reloads the app; the app then
+      returns to the game it was playing. */
+   function exitPlayer(notice) {
+      var ret = state.current ? { romId: state.current.romId, platformId: state.current.platformId, notice: notice || "" } : null;
+      try {
+         sessionStorage.setItem("romm.return", JSON.stringify(ret));
+      } catch (e) {
+         /* without session storage the app opens on the library */
+      }
+      window.location.reload();
    }
 
    /* ----------------------------------------------------------- remote -- */
@@ -643,6 +773,13 @@
 
    document.addEventListener("keydown", function (e) {
       var k = e.keyCode;
+      if (state.playing) {
+         if (k === KEY.BACK || k === KEY.ESC) {
+            e.preventDefault();
+            exitPlayer("");
+         }
+         return;
+      }
       if (k === KEY.BACK || k === KEY.ESC) {
          e.preventDefault();
          back();
@@ -657,7 +794,30 @@
 
    /* ------------------------------------------------------------- start -- */
 
+   function autoConnect(ret) {
+      show([viewServer], "Connecting to " + state.server + "…");
+      probe(state.server).then(function (ok) {
+         if (!ok) {
+            show([viewServer], "Can't reach " + state.server);
+            return;
+         }
+         var stack = [viewServer, viewLibrary];
+         if (ret && ret.romId) stack.push(function () { openRom(ret.romId, ret.platformId); });
+         show(stack, ret && ret.notice ? ret.notice : undefined);
+      });
+   }
+
    state.server = normalize(load("romm.server") || (window.ROMM_URL || ""));
    state.token = load("romm.token");
-   show([viewServer]);
+
+   var resume = null;
+   try {
+      resume = JSON.parse(sessionStorage.getItem("romm.return") || "null");
+      sessionStorage.removeItem("romm.return");
+   } catch (e) {
+      resume = null;
+   }
+
+   if (state.server && state.token) autoConnect(resume);
+   else show([viewServer], resume && resume.notice ? resume.notice : undefined);
 })();
