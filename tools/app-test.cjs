@@ -161,7 +161,7 @@ async function focusedText(page) {
     check("game detail shows the description", (await page.textContent("body")).includes("Run and gun classic."));
 
     await page.keyboard.press("Escape");
-    await page.waitForSelector("text=Load more", { state: "detached", timeout: 3000 }).catch(() => {});
+    await page.waitForSelector("text=Mahjong", { timeout: 8000 }).catch(() => {});
     check("Back returns to the game list", (await page.textContent("body")).includes("Mahjong"));
 
     check("no page errors", errors.length === 0, errors.join(" | "));
