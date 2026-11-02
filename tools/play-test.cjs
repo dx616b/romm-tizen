@@ -116,6 +116,13 @@ function app(port) {
   const rommServer = await romm(8501);
   const browser = await chromium.launch({ args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await context.addInitScript(() => {
+    try {
+      localStorage.setItem("romm.settings", JSON.stringify({ vsync: "disabled", speed: true }));
+    } catch {
+      /* opaque origin */
+    }
+  });
   const page = await context.newPage();
   const errors = [];
   /* The internet is cut off on purpose: nothing may depend on the CDN. */
@@ -148,7 +155,16 @@ function app(port) {
   await page.click("button:has-text('Play')");
 
   await page.waitForSelector("#game canvas", { timeout: 60000 }).catch(() => {});
-  await page.waitForTimeout(25000);
+  await page.waitForTimeout(15000);
+  const frames = () => page.evaluate(() => window.EJS_emulator.gameManager.getFrameNum());
+  const f0 = await frames();
+  await page.waitForTimeout(10000);
+  const f1 = await frames();
+  const fps = ((f1 - f0) / 10).toFixed(1);
+  const rewind = await page.evaluate(() => window.EJS_emulator.rewindEnabled);
+  console.log(`INFO  emulator speed over 10 s: ${fps} frames/s (rewind ${rewind ? "on" : "off"})`);
+  const meter = await page.textContent(".speed").catch(() => "");
+  console.log(`INFO  on-screen speed meter: ${meter}`);
   await page.screenshot({ path: "/tmp/play-shot.png" });
 
   const vsync = await page.evaluate(() => {

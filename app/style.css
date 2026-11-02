@@ -352,3 +352,16 @@ input:focus {
    inset: 0;
    background: #000;
 }
+
+.speed {
+   position: fixed;
+   top: 16px;
+   left: 16px;
+   z-index: 10;
+   padding: 6px 12px;
+   border-radius: 8px;
+   background: rgba(0, 0, 0, 0.6);
+   color: #9ef09e;
+   font-family: ui-monospace, "Roboto Mono", monospace;
+   font-size: 22px;
+}

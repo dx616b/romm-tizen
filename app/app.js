@@ -531,7 +531,10 @@
       } catch (e) {
          stored = {};
       }
-      return { vsync: stored.vsync === "enabled" ? "enabled" : "disabled" };
+      return {
+         vsync: stored.vsync === "enabled" ? "enabled" : "disabled",
+         speed: stored.speed === true
+      };
    }
 
    function saveSettings(settings) {
@@ -546,9 +549,17 @@
          viewSettings();
       } } });
       vsync.textContent = "VSync: " + (settings.vsync === "enabled" ? "On" : "Off");
+      var speed = button({ text: "", on: { click: function () {
+         settings.speed = !settings.speed;
+         saveSettings(settings);
+         viewSettings();
+      } } });
+      speed.textContent = "Show speed: " + (settings.speed ? "On" : "Off");
       screen("Settings", [
          vsync,
          el("p", { className: "hint", text: "VSync locks the picture to the TV's refresh rate. Turn it off for smoother games on most TVs." }),
+         speed,
+         el("p", { className: "hint", text: "Shows the game's frames per second in the corner while playing." }),
          button({ text: "Back", on: { click: back } })
       ]);
    }
@@ -740,6 +751,7 @@
          } catch (e) {
             /* the core has no VSync control */
          }
+         if (settings.speed) startSpeedMeter();
       };
       window.EJS_pathtodata = state.server + EMULATORJS_PATH;
       window.EJS_threads = false;
@@ -753,6 +765,26 @@
          exitPlayer("The emulator could not be loaded. Check that RomM serves /assets/emulatorjs.");
       };
       document.body.appendChild(loader);
+   }
+
+   function startSpeedMeter() {
+      var box = el("div", { className: "speed", text: "-- fps" });
+      root.appendChild(box);
+      var last = null;
+      var lastTime = 0;
+      setInterval(function () {
+         try {
+            var frames = window.EJS_emulator.gameManager.getFrameNum();
+            var now = Date.now();
+            if (last !== null && now > lastTime) {
+               box.textContent = Math.round((frames - last) * 1000 / (now - lastTime)) + " fps";
+            }
+            last = frames;
+            lastTime = now;
+         } catch (e) {
+            /* the emulator is not running yet */
+         }
+      }, 1000);
    }
 
    /* EmulatorJS keeps global state, so leaving a game reloads the app; the app then
