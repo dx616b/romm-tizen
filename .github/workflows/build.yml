@@ -27,6 +27,13 @@ jobs:
         run: |
           node --check app/launch.js
           node --check app/config.js
+          node --check tools/smoke.cjs
+
+      - name: Smoke test (headless Chromium)
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+          node tools/smoke.cjs
 
       - name: Build .wgt
         env:

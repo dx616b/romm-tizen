@@ -20,6 +20,7 @@
    var inputEl = document.getElementById("url");
    var hintEl = document.getElementById("hint");
    var retryEl = document.getElementById("retry");
+   var forceEl = document.getElementById("force");
    var changeEl = document.getElementById("change");
    var goEl = document.getElementById("go");
 
@@ -60,20 +61,27 @@
       statusEl.textContent = text;
    }
 
+   function hideActions() {
+      formEl.hidden = true;
+      hintEl.hidden = true;
+      retryEl.hidden = true;
+      forceEl.hidden = true;
+      changeEl.hidden = true;
+   }
+
    function showForm(url) {
+      hideActions();
       formEl.hidden = false;
       hintEl.hidden = false;
-      retryEl.hidden = true;
-      changeEl.hidden = true;
       inputEl.value = url || "";
       inputEl.focus();
       setStatus("Enter your RomM server address");
    }
 
    function showUnreachable(url) {
-      formEl.hidden = true;
-      hintEl.hidden = true;
+      hideActions();
       retryEl.hidden = false;
+      forceEl.hidden = false;
       changeEl.hidden = false;
       setStatus("Can't reach " + hostOf(url));
    }
@@ -81,10 +89,7 @@
    function open(url) {
       writeStored(url);
       setStatus("Opening " + hostOf(url) + "…");
-      formEl.hidden = true;
-      hintEl.hidden = true;
-      retryEl.hidden = true;
-      changeEl.hidden = true;
+      hideActions();
       window.location.replace(url + "/");
    }
 
@@ -138,10 +143,7 @@
    function attempt(url) {
       current = url;
       setStatus("Connecting to " + hostOf(url) + "…");
-      formEl.hidden = true;
-      hintEl.hidden = true;
-      retryEl.hidden = true;
-      changeEl.hidden = true;
+      hideActions();
 
       reachable(url).then(function (ok) {
          if (ok) open(url);
@@ -175,6 +177,10 @@
 
    changeEl.addEventListener("click", function () {
       showForm(current);
+   });
+
+   forceEl.addEventListener("click", function () {
+      if (current) open(current);
    });
 
    goEl.addEventListener("keydown", function (event) {
