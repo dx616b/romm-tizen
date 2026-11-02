@@ -23,17 +23,17 @@ jobs:
         id: ver
         run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Lint the launcher
+      - name: Lint the app
         run: |
-          node --check app/launch.js
+          node --check app/app.js
           node --check app/config.js
-          node --check tools/smoke.cjs
+          node --check tools/app-test.cjs
 
-      - name: Smoke test (headless Chromium)
+      - name: Test the app (headless Chromium, fake RomM server)
         run: |
           npm install --no-save playwright@1
           npx playwright install --with-deps chromium
-          node tools/smoke.cjs
+          node tools/app-test.cjs
 
       - name: Build .wgt
         env:

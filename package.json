@@ -1,8 +1,8 @@
 {
   "name": "romm-tizen",
   "appName": "RomM",
-  "version": "0.1.0",
-  "description": "RomM client for Samsung Tizen TVs: the full RomM web UI, GPU-accelerated browser player, TV remote and gamepad support.",
+  "version": "0.2.0",
+  "description": "RomM client for Samsung Tizen TVs: pair with RomM, browse your library and covers with the remote.",
   "packageType": "app",
   "appPath": "app/index.html",
   "keys": [

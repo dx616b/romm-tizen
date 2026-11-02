@@ -1,118 +1,74 @@
 # RomM for Tizen
 
-A Samsung Tizen TV client for [RomM](https://github.com/rommapp/romm).
+A Samsung Tizen TV client for [RomM](https://github.com/rommapp/romm). The TV
+pairs with your RomM server the same way a phone or desktop does, then lets you
+browse your library with the TV remote.
 
-This is deliberately a thin launcher. It opens **RomM's own web frontend** in the
-TV's Chromium engine, so the library grid, cover art, filters, login and the
-browser game player are exactly the ones you get in a desktop browser — including
-WebGL rendering on the TV's GPU and gamepad support.
+What it does today:
+
+- **Pairing with a code.** The TV shows a short code. You approve it in RomM on a
+  phone or computer. No typing passwords with the remote.
+- **Platforms and games.** Browse platforms and their games, with cover art,
+  using D-pad and OK. Back goes up a level.
+- **Game details.** Cover, description, file name and size.
+
+Not yet: playing games on the TV. The Play button is in place and says so.
 
 ```
-app/index.html   splash: pick the server, then hand over to RomM
-app/config.js    default server address
-app/launch.js    reachability probe and navigation
+app/index.html   the page
+app/app.js       server, pairing, library and remote navigation
+app/style.css    TV layout
+app/config.js    optional default server address (empty by default)
 tizen/           widget manifest
+tools/app-test.cjs   end-to-end test against a fake RomM server
 ```
+
+## Server setting (required)
+
+The TV's app loads from a local origin and calls your RomM server directly, so
+RomM must allow that origin. On the RomM server, set:
+
+```
+ROMM_CORS_ALLOWED_ORIGINS=*
+```
+
+and restart RomM. Without it the TV connects but cannot load the library.
 
 ## Install
 
-A `.wgt` signed with a self-signed certificate is rejected by the TV with
-**"Operation not allowed"**. Samsung TVs only install packages signed with a
-distributor certificate that Samsung issues for that specific TV (identified by
-its DUID), so signing needs one round trip through a Samsung account.
+A `.wgt` must be signed for your TV. In Apps2Samsung, choose the `RomM.wgt` file to
+install. It re-signs the package with your Samsung certificate.
 
-### One command
+The package id is `RommTV0001` (exactly 10 characters, as Tizen requires).
 
-Prerequisites: `sdb` (from Tizen Studio or the Samsung TV SDK), Node.js and git.
-Turn on developer mode on the TV first: **Apps → press `12345` → Host PC IP** =
-the address of the computer running the command, then restart the TV.
+## Use
 
-```sh
-./tools/tv-setup.sh 192.168.1.50
-```
+1. Open **RomM** on the TV.
+2. Enter your server address, for example `http://192.168.1.10`, and press OK.
+3. Note the code shown on the TV. In RomM on a phone or computer, open the link
+   on the screen and approve the code.
+4. Browse platforms and games.
 
-It reads the TV's DUID, opens Samsung's sign-in page, creates the author and
-distributor certificates, builds `RomM.wgt`, registers the TV and installs the
-app. Certificates are cached in `~/.config/romm-tizen/samsung-cert`, so later
-runs only rebuild and reinstall.
+To unpair the TV, choose **Forget this TV** on the platforms screen.
 
-### Manually
+## Remote
 
-```sh
-# 1. DUID
-sdb connect 192.168.1.50:26101
-sdb -s 192.168.1.50:26101 shell 0 getduid
-
-# 2. certificates (paste the JSON from the sign-in page when asked)
-node cli.js create-samsung-cert --name "RomM TV" --email you@example.com \
-  --password <pass> --duidList <duid> --privilege Public --output cert/
-
-# 3. build
-cd wgt && node cli.js build . -t wgt -o ../RomM.wgt \
-  --author ../cert/author.p12 --authorPwd <pass> \
-  --distributor ../cert/distributor.p12 --distributorPwd <pass>
-
-# 4. install
-sdb -s 192.168.1.50:26101 push cert/device-profile.xml /home/owner/share/tmp/sdk_tools/device-profile.xml
-sdb -s 192.168.1.50:26101 install RomM.wgt
-```
-
-CI builds `RomM.wgt` on every push. To make those artifacts installable, add the
-certificates from step 2 as repository secrets, base64-encoded:
-
-```sh
-base64 -w0 cert/author.p12      > author.b64        # -> TIZEN_AUTHOR_P12
-base64 -w0 cert/distributor.p12 > distributor.b64   # -> TIZEN_DISTRIBUTOR_P12
-```
-
-plus `TIZEN_AUTHOR_PASSWORD` and `TIZEN_DISTRIBUTOR_PASSWORD`. Without them the
-workflow still builds, but signs with a throwaway certificate the TV refuses.
-
-### Tizen no cert route
-
-If TizenBrew is already installed on the TV, a module can be added from a GitHub
-repository without touching certificates. This client is a plain web app, so it
-can be registered as a module pointing at `app/`, though navigating to RomM takes
-over the TizenBrew window.
-
-## Configure
-
-Set the server in `app/config.js` before building:
-
-```js
-window.ROMM_URL = "http://192.168.1.10";
-```
-
-or leave it unset and type the address on the splash screen — the choice is
-stored in `localStorage` and used on the next launch. "Change server" on the
-splash screen reopens the form.
-
-The TV must be able to reach the RomM host, so use a LAN address rather than
-`localhost`.
-
-## Logging in
-
-Login is RomM's own login page. Browsing the library with the remote is fine; for
-typing credentials comfortably, sign in on a phone or PC and use RomM's
-device-pairing screen, or pair a Bluetooth keyboard/gamepad.
-
-## Controls
-
-| Input | Effect |
+| Key | Action |
 | --- | --- |
-| D-pad | move focus through RomM's UI |
-| OK / Enter | activate |
-| Back | previous RomM page |
-| Bluetooth/USB gamepad | handled by RomM's player directly |
+| Arrow keys | move focus |
+| OK / Enter | open or activate |
+| Back | go up one level (exits from the first screen) |
 
 ## Development
 
 ```sh
-python3 -m http.server 8000 --directory app
+npm install --no-save playwright@1 && npx playwright install chromium
+node tools/app-test.cjs
 ```
 
-Open <http://localhost:8000> to exercise the splash screen. Browser CORS rules
-differ from the TV, so the reachability probe is best judged on the device.
+The test serves `app/` and a fake RomM server, then drives the client with arrow
+keys and Enter. It covers pairing, approval, platforms, games, covers, detail,
+Back, and recovery from an expired token.
 
 ## License
 
