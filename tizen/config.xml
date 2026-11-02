@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://github.com/dx616b/romm-tizen" version="@VERSION@" viewmodes="maximized">
-    <tizen:application id="RommTzn0.RomM" package="RommTzn0" required_version="6.5"/>
+    <tizen:application id="RommTV0001.RomM" package="RommTV0001" required_version="6.5"/>
     <content src="index.html"/>
     <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
     <icon src="icon.png"/>
