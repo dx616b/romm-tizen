@@ -152,12 +152,7 @@
    }
 
    function start() {
-      var url = normalize(readStored() || defaultUrl());
-      if (!url) {
-         showForm("");
-         return;
-      }
-      attempt(url);
+      showForm(normalize(readStored() || defaultUrl()));
    }
 
    formEl.addEventListener("submit", function (event) {

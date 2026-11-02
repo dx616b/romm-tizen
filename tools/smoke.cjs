@@ -73,6 +73,7 @@ function check(name, ok, extra) {
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto("http://localhost:8000/");
+    await page.click("#go");
     await page.waitForURL("http://127.0.0.1:8001/", { timeout: 8000 }).catch(() => {});
     const body = await page.textContent("body").catch(() => "");
     check("reachable server is opened", body.includes("FAKE_ROMM"));
@@ -80,10 +81,9 @@ function check(name, ok, extra) {
     await page.close();
   }
 
-  // A server saved from the splash overrides the build-time default.
+  // The splash always opens on the form, pre-filled with the last server used,
+  // so a wrong server can be corrected on the TV without clearing storage.
   {
-    const alt = await serveFakeRomm(8005);
-    const saved = await serveApp(8006, 'window.ROMM_URL = "http://127.0.0.1:8009";\n');
     const context = await browser.newContext();
     await context.addInitScript(() => {
       try {
@@ -93,12 +93,11 @@ function check(name, ok, extra) {
       }
     });
     const page = await context.newPage();
-    await page.goto("http://localhost:8006/");
-    await page.waitForURL("http://127.0.0.1:8005/", { timeout: 8000 }).catch(() => {});
-    check("saved server wins over the default", page.url() === "http://127.0.0.1:8005/", page.url());
+    await page.goto("http://localhost:8000/");
+    const value = await page.inputValue("#url");
+    check("saved server is pre-filled", value === "http://127.0.0.1:8005", value);
+    check("no server is opened without confirmation", page.url() === "http://localhost:8000/", page.url());
     await context.close();
-    await saved.close();
-    await alt.close();
   }
 
   await app.close();
@@ -109,6 +108,8 @@ function check(name, ok, extra) {
     const dead = await serveApp(8002, 'window.ROMM_URL = "http://127.0.0.1:8009";\n');
     const page = await browser.newPage();
     await page.goto("http://localhost:8002/");
+    await page.fill("#url", "http://127.0.0.1:8009");
+    await page.click("#go");
     await page
       .waitForFunction(
         () => document.getElementById("status").textContent.startsWith("Can't reach"),
@@ -124,7 +125,7 @@ function check(name, ok, extra) {
         (await page.isVisible("#change")),
     );
     await page.click("#change");
-    check("the server form opens", await page.isVisible("#form"));
+    check("the server form reopens", await page.isVisible("#form"));
     await page.close();
     await dead.close();
   }
@@ -145,6 +146,7 @@ function check(name, ok, extra) {
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto("file://" + path.join(stage, "index.html"));
+    await page.click("#go");
     await page.waitForURL("http://127.0.0.1:8001/", { timeout: 9000 }).catch(() => {});
     check("probe works from a file:// widget", (await page.textContent("body")).includes("FAKE_ROMM"));
     check("no page errors from a file:// widget", errors.length === 0, errors.join("| "));

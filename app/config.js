@@ -1,8 +1,7 @@
 /*
  * RomM TV client configuration.
  *
- * ROMM_URL is the RomM server the TV opens. Edit it here before building, or
- * use "Change server" on the splash screen; whatever is entered there is kept
- * in localStorage and wins over this default.
+ * Optional default RomM server. Leave empty to type the address on the TV;
+ * the last address used is remembered and pre-filled.
  */
-window.ROMM_URL = "http://romm.electron.al";
+window.ROMM_URL = "";
