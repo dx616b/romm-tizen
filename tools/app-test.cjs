@@ -218,6 +218,7 @@ async function focusedText(page) {
     check("the EmulatorJS loader comes from RomM", loaderRequests.some((u) => u.startsWith("http://127.0.0.1:8001/assets/emulatorjs/data/")), loaderRequests[0] || "");
 
     await page.keyboard.press("Escape");
+    await page.click("button:has-text('Back to this game')");
     await page.waitForSelector("text=Metal Slug", { timeout: 10000 }).catch(() => {});
     check("leaving the game returns to that title", (await page.textContent("body")).includes("Metal Slug") && (await page.locator("#game").count()) === 0);
     await context.close();
