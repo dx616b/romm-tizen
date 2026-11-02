@@ -514,12 +514,43 @@
             tiles.length
                ? el("div", { className: "grid" }, tiles)
                : el("p", { className: "hint", text: "No games in this library yet." }),
+            button({ text: "Settings", on: { click: function () { push(viewSettings); } } }),
             button({ text: "Forget this TV", on: { click: forget } })
          ], "Signed in to " + state.server);
       }).catch(function (err) {
          if (err.unauthorized) return;
          screen("Platforms", errorNodes(err, viewLibrary));
       });
+   }
+
+   /* Settings the TV applies to every game. VSync is off by default. */
+   function loadSettings() {
+      var stored = {};
+      try {
+         stored = JSON.parse(load("romm.settings") || "{}");
+      } catch (e) {
+         stored = {};
+      }
+      return { vsync: stored.vsync === "enabled" ? "enabled" : "disabled" };
+   }
+
+   function saveSettings(settings) {
+      save("romm.settings", JSON.stringify(settings));
+   }
+
+   function viewSettings() {
+      var settings = loadSettings();
+      var vsync = button({ text: "", on: { click: function () {
+         settings.vsync = settings.vsync === "enabled" ? "disabled" : "enabled";
+         saveSettings(settings);
+         viewSettings();
+      } } });
+      vsync.textContent = "VSync: " + (settings.vsync === "enabled" ? "On" : "Off");
+      screen("Settings", [
+         vsync,
+         el("p", { className: "hint", text: "VSync locks the picture to the TV's refresh rate. Turn it off for smoother games on most TVs." }),
+         button({ text: "Back", on: { click: back } })
+      ]);
    }
 
    function forget() {
@@ -698,13 +729,14 @@
       window.EJS_externalFiles = game.externalFiles || {};
       /* VSync off by default. Saved settings would override this default once a user
          changes anything, so they are turned off; the TV has no settings to keep. */
-      window.EJS_defaultOptions = { vsync: "disabled" };
+      var settings = loadSettings();
+      window.EJS_defaultOptions = { vsync: settings.vsync };
       window.EJS_disableLocalStorage = true;
-      /* The defaults above are not always applied to the running core, so VSync is also
-         switched off once the game starts. */
+      /* The defaults above are not always applied to the running core, so the chosen
+         VSync is also set once the game starts. */
       window.EJS_onGameStart = function () {
          try {
-            window.EJS_emulator.gameManager.setVSync(false);
+            window.EJS_emulator.gameManager.setVSync(settings.vsync === "enabled");
          } catch (e) {
             /* the core has no VSync control */
          }

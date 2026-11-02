@@ -212,7 +212,7 @@ async function focusedText(page) {
     check("the Neo Geo core is chosen", (await page.evaluate(() => window.EJS_core)) === "fbneo");
     check("the game is a local blob, not a RomM URL", String(await page.evaluate(() => window.EJS_gameUrl)).startsWith("blob:"));
     check("the BIOS goes in whole as neogeo.zip", String(await page.evaluate(() => (window.EJS_externalFiles || {})["/neogeo.zip"])).startsWith("blob:"));
-    check("VSync default is set", (await page.evaluate(() => JSON.stringify(window.EJS_defaultOptions))) === '{"vsync":"disabled"}');
+    check("VSync is off by default", (await page.evaluate(() => JSON.stringify(window.EJS_defaultOptions))) === '{"vsync":"disabled"}');
     check("the ROM and BIOS were fetched with the device token", state.contentHits.includes("rom") && state.contentHits.includes("bios"), state.contentHits.join(","));
     await page.waitForTimeout(800);
     check("the EmulatorJS loader comes from RomM", loaderRequests.some((u) => u.startsWith("http://127.0.0.1:8001/assets/emulatorjs/data/")), loaderRequests[0] || "");
@@ -220,6 +220,24 @@ async function focusedText(page) {
     await page.keyboard.press("Escape");
     await page.waitForSelector("text=Metal Slug", { timeout: 10000 }).catch(() => {});
     check("leaving the game returns to that title", (await page.textContent("body")).includes("Metal Slug") && (await page.locator("#game").count()) === 0);
+    await context.close();
+  }
+
+  // Settings: VSync can be turned on, and the choice reaches the next game.
+  {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto("http://localhost:8000/");
+    await page.fill("#url", "http://127.0.0.1:8001");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("text=ABCD-EFGH", { timeout: 8000 }).catch(() => {});
+    await fetch("http://127.0.0.1:8001/__approve");
+    await page.waitForSelector("text=Settings", { timeout: 10000 }).catch(() => {});
+    await page.click("button:has-text('Settings')");
+    check("settings shows VSync off", (await page.textContent("body")).includes("VSync: Off"));
+    await page.click("button:has-text('VSync')");
+    check("VSync can be turned on", (await page.textContent("body")).includes("VSync: On"));
+    check("the choice is saved on the TV", (await page.evaluate(() => localStorage.getItem("romm.settings"))) === '{"vsync":"enabled"}');
     await context.close();
   }
 
