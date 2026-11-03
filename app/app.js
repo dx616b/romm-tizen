@@ -337,7 +337,14 @@
       found.innerHTML = "";
       status.textContent = "Looking for your network…";
       localNetworks().then(function (prefixes) {
-         if (!prefixes.length) prefixes = ["192.168.1", "192.168.0", "10.0.0"];
+         /* The TV reports every network it has, including virtual ones. Keep the home-style
+            192.168.x networks, plus the subnet the page itself came from; cap the scan. */
+         var home = prefixes.filter(function (p) { return /^192\.168\./.test(p); });
+         var fromPage = /^\d+\.\d+\.\d+$/.test(location.hostname.split(".").slice(0, 3).join(".")) &&
+            /^(192\.168|10)\./.test(location.hostname) ? location.hostname.split(".").slice(0, 3).join(".") : null;
+         var chosen = home.slice(0, 2);
+         if (fromPage && chosen.indexOf(fromPage) < 0) chosen.unshift(fromPage);
+         prefixes = chosen.length ? chosen : ["192.168.1"];
          var hosts = [];
          prefixes.forEach(function (prefix) {
             for (var i = 1; i < 255; i++) hosts.push("http://" + prefix + "." + i);
