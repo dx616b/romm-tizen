@@ -534,7 +534,7 @@
       }
       return {
          vsync: stored.vsync === "enabled" ? "enabled" : "disabled",
-         speed: stored.speed === true
+         speed: stored.speed !== false
       };
    }
 
@@ -778,23 +778,62 @@
       return version + (gpu ? " · " + gpu : "");
    }
 
-   /* Always logs to the console (visible in the TV inspector); shows it on screen when enabled. */
+   /* Live diagnostics for the game: frame rate, audio, graphics and device. Shown on screen
+      when "Show speed" is on, and always written to the console as [diag] lines. */
+   function audioInfo() {
+      try {
+         var ctx = window.EJS_emulator.Module.AL.currentCtx.audioCtx;
+         return {
+            state: ctx.state,
+            sampleRate: ctx.sampleRate,
+            baseLatencyMs: ctx.baseLatency ? Math.round(ctx.baseLatency * 1000) : null,
+            outputLatencyMs: ctx.outputLatency ? Math.round(ctx.outputLatency * 1000) : null
+         };
+      } catch (e) {
+         return { state: "not started" };
+      }
+   }
+
+   function diagnostics(samples) {
+      var sorted = samples.slice().sort(function (a, b) { return a - b; });
+      var sum = samples.reduce(function (a, b) { return a + b; }, 0);
+      return {
+         fps: samples.length ? samples[samples.length - 1] : null,
+         fpsAvg30s: samples.length ? Math.round(sum / samples.length) : null,
+         fpsMin30s: sorted.length ? sorted[0] : null,
+         belowTargetSeconds: samples.filter(function (f) { return f < 55; }).length,
+         audio: audioInfo(),
+         graphics: graphicsInfo(),
+         screen: window.innerWidth + "x" + window.innerHeight + " @" + window.devicePixelRatio,
+         memoryMB: window.performance && performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+         userAgent: navigator.userAgent,
+         vsync: loadSettings().vsync,
+         core: window.EJS_core
+      };
+   }
+
    function startSpeedMeter(show) {
       var box = el("div", { className: "speed", text: "-- fps" });
-      box.appendChild(el("div", { className: "speed-gpu", text: graphicsInfo() }));
-      box.appendChild(el("div", { className: "speed-gpu", text: navigator.userAgent }));
+      var gpu = el("div", { className: "speed-gpu", text: "" });
+      box.appendChild(gpu);
       if (show) root.appendChild(box);
-      console.log("[speed] graphics: " + graphicsInfo() + " | user agent: " + navigator.userAgent);
       var last = null;
       var lastTime = 0;
+      var samples = [];
+      var seconds = 0;
       setInterval(function () {
          try {
             var frames = window.EJS_emulator.gameManager.getFrameNum();
             var now = Date.now();
-            if (last !== null && now > lastTime) {
+            if (last !== null && now > lastTime && frames > 0) {
                var fps = Math.round((frames - last) * 1000 / (now - lastTime));
-               box.firstChild.textContent = fps + " fps";
-               if (frames > 0) console.log("[speed] " + fps + " fps");
+               samples.push(fps);
+               if (samples.length > 30) samples.shift();
+               var d = diagnostics(samples);
+               box.firstChild.textContent = fps + " fps · audio " + d.audio.state;
+               gpu.textContent = d.graphics + " · " + d.screen;
+               seconds++;
+               if (seconds % 10 === 0) console.log("[diag] " + JSON.stringify(d));
             }
             last = frames;
             lastTime = now;
@@ -802,6 +841,7 @@
             /* the emulator is not running yet */
          }
       }, 1000);
+      console.log("[diag] start " + JSON.stringify(diagnostics([])));
    }
 
    /* The game menu is ours, not EmulatorJS's: EmulatorJS's menu needs a mouse. Back opens it,
