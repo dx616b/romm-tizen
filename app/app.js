@@ -534,7 +534,9 @@
       }
       return {
          vsync: stored.vsync === "enabled" ? "enabled" : "disabled",
-         speed: stored.speed !== false
+         speed: stored.speed !== false,
+         core: stored.core === "legacy" ? "legacy" : "standard",
+         frameSkip: stored.frameSkip === true
       };
    }
 
@@ -556,11 +558,27 @@
          viewSettings();
       } } });
       speed.textContent = "Show speed: " + (settings.speed ? "On" : "Off");
+      var core = button({ text: "", on: { click: function () {
+         settings.core = settings.core === "legacy" ? "standard" : "legacy";
+         saveSettings(settings);
+         viewSettings();
+      } } });
+      core.textContent = "Game core: " + (settings.core === "legacy" ? "Legacy (WebGL1)" : "Standard (WebGL2)");
+      var skip = button({ text: "", on: { click: function () {
+         settings.frameSkip = !settings.frameSkip;
+         saveSettings(settings);
+         viewSettings();
+      } } });
+      skip.textContent = "Frame skip: " + (settings.frameSkip ? "On" : "Off");
       screen("Settings", [
          vsync,
          el("p", { className: "hint", text: "VSync locks the picture to the TV's refresh rate. Turn it off for smoother games on most TVs." }),
          speed,
          el("p", { className: "hint", text: "Shows the game's frames per second in the corner while playing." }),
+         core,
+         el("p", { className: "hint", text: "Legacy uses the older graphics path. Try it if games run slowly on Standard." }),
+         skip,
+         el("p", { className: "hint", text: "Skips drawing every other frame to keep up with the game. Pictures look less smooth, sound stutters less." }),
          button({ text: "Back", on: { click: back } })
       ]);
    }
@@ -742,7 +760,9 @@
       /* VSync off by default. Saved settings would override this default once a user
          changes anything, so they are turned off; the TV has no settings to keep. */
       var settings = loadSettings();
+      window.EJS_forceLegacyCores = settings.core === "legacy";
       window.EJS_defaultOptions = { vsync: settings.vsync };
+      if (settings.frameSkip) window.EJS_defaultOptions["fbneo-frameskip"] = "1";
       window.EJS_disableLocalStorage = true;
       /* The defaults above are not always applied to the running core, so the chosen
          VSync is also set once the game starts. */
@@ -808,7 +828,9 @@
          memoryMB: window.performance && performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
          userAgent: navigator.userAgent,
          vsync: loadSettings().vsync,
-         core: window.EJS_core
+         core: window.EJS_core,
+         coreBuild: window.EJS_emulator && window.EJS_emulator.webgl2Enabled === false ? "legacy (WebGL1)" : "standard (WebGL2)",
+         frameSkip: loadSettings().frameSkip
       };
    }
 

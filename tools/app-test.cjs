@@ -238,7 +238,7 @@ async function focusedText(page) {
     check("settings shows VSync off", (await page.textContent("body")).includes("VSync: Off"));
     await page.click("button:has-text('VSync')");
     check("VSync can be turned on", (await page.textContent("body")).includes("VSync: On"));
-    check("the choice is saved on the TV", (await page.evaluate(() => localStorage.getItem("romm.settings"))) === '{"vsync":"enabled","speed":true}');
+    check("the choice is saved on the TV", (await page.evaluate(() => localStorage.getItem("romm.settings"))) === '{"vsync":"enabled","speed":true,"core":"standard","frameSkip":false}');
     await context.close();
   }
 
