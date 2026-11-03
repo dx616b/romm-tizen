@@ -781,6 +781,7 @@
    function startSpeedMeter() {
       var box = el("div", { className: "speed", text: "-- fps" });
       box.appendChild(el("div", { className: "speed-gpu", text: graphicsInfo() }));
+      box.appendChild(el("div", { className: "speed-gpu", text: navigator.userAgent }));
       root.appendChild(box);
       var last = null;
       var lastTime = 0;
