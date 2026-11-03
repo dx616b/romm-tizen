@@ -752,7 +752,7 @@
          } catch (e) {
             /* the core has no VSync control */
          }
-         if (settings.speed) startSpeedMeter();
+         startSpeedMeter(settings.speed);
       };
       window.EJS_pathtodata = state.server + EMULATORJS_PATH;
       window.EJS_threads = false;
@@ -778,11 +778,13 @@
       return version + (gpu ? " · " + gpu : "");
    }
 
-   function startSpeedMeter() {
+   /* Always logs to the console (visible in the TV inspector); shows it on screen when enabled. */
+   function startSpeedMeter(show) {
       var box = el("div", { className: "speed", text: "-- fps" });
       box.appendChild(el("div", { className: "speed-gpu", text: graphicsInfo() }));
       box.appendChild(el("div", { className: "speed-gpu", text: navigator.userAgent }));
-      root.appendChild(box);
+      if (show) root.appendChild(box);
+      console.log("[speed] graphics: " + graphicsInfo() + " | user agent: " + navigator.userAgent);
       var last = null;
       var lastTime = 0;
       setInterval(function () {
@@ -790,7 +792,9 @@
             var frames = window.EJS_emulator.gameManager.getFrameNum();
             var now = Date.now();
             if (last !== null && now > lastTime) {
-               box.firstChild.textContent = Math.round((frames - last) * 1000 / (now - lastTime)) + " fps";
+               var fps = Math.round((frames - last) * 1000 / (now - lastTime));
+               box.firstChild.textContent = fps + " fps";
+               if (frames > 0) console.log("[speed] " + fps + " fps");
             }
             last = frames;
             lastTime = now;
