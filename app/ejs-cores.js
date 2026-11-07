@@ -9,9 +9,9 @@ var EJS_CORES = {
   amiga: ["puae"],
   "amiga-cd32": ["puae"],
   arcade: [
+    "fbneo",
     "mame2003_plus",
     "mame2003",
-    "fbneo",
     "fbalpha2012_cps1",
     "fbalpha2012_cps2",
   ],

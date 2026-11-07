@@ -664,7 +664,7 @@
          var status = el("p", { className: "status" });
          var summary = rom.summary ? rom.summary.slice(0, 500) : "No description.";
          var backdrop = poster ? el("div", { className: "backdrop", id: "backdrop" }) : null;
-         if (backdrop) backdrop.style.backgroundImage = "url(\"" + poster + "\")";
+         if (backdrop) backdrop.style.backgroundImage = "linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url(\"" + poster + "\")";
          screen(rom.name || rom.fs_name, [
             backdrop,
             el("div", { className: "detail" }, [
@@ -796,13 +796,16 @@
    }
 
    /* What the TV can draw with: WebGL2 for the GPU build of the core, otherwise WebGL1. */
+   var graphics = null;
    function graphicsInfo() {
+      if (graphics !== null) return graphics;
       var probe = document.createElement("canvas");
       var gl = probe.getContext("webgl2");
       var version = gl ? "WebGL2" : probe.getContext("webgl") ? "WebGL1" : "no WebGL";
       var ext = gl && gl.getExtension("WEBGL_debug_renderer_info");
       var gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "";
-      return version + (gpu ? " · " + gpu : "");
+      graphics = version + (gpu ? " · " + gpu : "");
+      return graphics;
    }
 
    /* Live diagnostics for the game: frame rate, audio, graphics and device. Shown on screen
@@ -821,6 +824,21 @@
       }
    }
 
+   var system = { cpu: null, freeMB: null };
+   /* Tizen's system info API reports whole-device CPU load and free memory (not the GPU). */
+   function readSystem() {
+      try {
+         tizen.systeminfo.getPropertyValue("CPU", function (cpu) {
+            system.cpu = Math.round(cpu.load * 100);
+         }, function () {});
+         tizen.systeminfo.getPropertyValue("MEMORY", function (mem) {
+            system.freeMB = Math.round(mem.availableCapacity / 1048576);
+         }, function () {});
+      } catch (e) {
+         /* not on a TV, or the API is missing */
+      }
+   }
+
    function diagnostics(samples) {
       var sorted = samples.slice().sort(function (a, b) { return a - b; });
       var sum = samples.reduce(function (a, b) { return a + b; }, 0);
@@ -831,6 +849,8 @@
          belowTargetSeconds: samples.filter(function (f) { return f < 55; }).length,
          audio: audioInfo(),
          graphics: graphicsInfo(),
+         cpuLoadPct: system.cpu,
+         memoryFreeMB: system.freeMB,
          screen: window.innerWidth + "x" + window.innerHeight + " @" + window.devicePixelRatio,
          memoryMB: window.performance && performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
          userAgent: navigator.userAgent,
@@ -854,13 +874,16 @@
          try {
             var frames = window.EJS_emulator.gameManager.getFrameNum();
             var now = Date.now();
+            readSystem();
             if (last !== null && now > lastTime && frames > 0) {
                var fps = Math.round((frames - last) * 1000 / (now - lastTime));
                samples.push(fps);
                if (samples.length > 30) samples.shift();
                var d = diagnostics(samples);
                box.firstChild.textContent = fps + " fps · audio " + d.audio.state;
-               gpu.textContent = d.graphics + " · " + d.screen;
+               gpu.textContent = d.graphics + " · " + d.screen +
+                  (d.cpuLoadPct !== null ? " · CPU " + d.cpuLoadPct + "%" : "") +
+                  (d.memoryFreeMB !== null ? " · " + d.memoryFreeMB + " MB free" : "");
                seconds++;
                if (seconds % 10 === 0) console.log("[diag] " + JSON.stringify(d));
             }

@@ -332,8 +332,6 @@ input:focus {
    inset: 0;
    background-size: cover;
    background-position: center;
-   filter: blur(48px) brightness(0.3) saturate(1.2);
-   transform: scale(1.1);
    z-index: 0;
    pointer-events: none;
 }
